@@ -17,10 +17,21 @@ contract LaunchDirectoryV1 is ILaunchDirectoryV1 {
         address hub;
         uint32 markets;
     }
+    // Market and custody are immutable prepared-market data; do not duplicate them.
+    // Preserve canonicalId across chain-id changes and manager independent of prepared manager.
+    struct StoredPosition {
+        bytes32 canonicalId;
+        address manager;
+        int24 tickLower;
+        int24 tickUpper;
+        uint128 liquidity;
+        uint256 tokenId;
+        bytes32 salt;
+    }
     struct MarketEntry {
         address adapter;
         PreparedMarketV1 prepared;
-        PositionIdentityV1[] positions;
+        StoredPosition[] positions;
     }
 
     address public immutable override core;
@@ -82,7 +93,7 @@ contract LaunchDirectoryV1 is ILaunchDirectoryV1 {
             ) revert InvalidRecord();
             if (launchOfPosition[expected] != bytes32(0)) revert DuplicateIdentity();
             launchOfPosition[expected] = launchId;
-            entry.positions.push(position);
+            entry.positions.push(StoredPosition(position.canonicalId, position.manager, position.tickLower, position.tickUpper, position.liquidity, position.tokenId, position.salt));
         }
     }
 
@@ -99,11 +110,18 @@ contract LaunchDirectoryV1 is ILaunchDirectoryV1 {
         external view override returns (PositionIdentityV1[] memory values)
     {
         if (limit > 100) revert InvalidPage();
-        PositionIdentityV1[] storage stored = _markets[launchId][marketIndex].positions;
+        MarketEntry storage entry = _markets[launchId][marketIndex];
+        StoredPosition[] storage stored = entry.positions;
         uint256 count = offset < stored.length ? stored.length - offset : 0;
         if (count > limit) count = limit;
         values = new PositionIdentityV1[](count);
-        for (uint256 i; i < count; ++i) values[i] = stored[offset + i];
+        for (uint256 i; i < count; ++i) {
+            StoredPosition storage p = stored[offset + i];
+            bytes32 marketId = entry.prepared.identity.canonicalId;
+            address custody = entry.prepared.custody;
+            bytes32 canonicalId = p.canonicalId;
+            values[i] = PositionIdentityV1(canonicalId, marketId, p.manager, custody, p.tokenId, p.tickLower, p.tickUpper, p.salt, p.liquidity);
+        }
     }
 
     function launches(uint256 offset, uint256 limit) external view override returns (bytes32[] memory values) {

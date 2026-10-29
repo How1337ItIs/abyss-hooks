@@ -22,3 +22,11 @@ remappings = [
 
 [rpc_endpoints]
 robinhood = "https://rpc.mainnet.chain.robinhood.com"
+
+# Bounded directory-only harness; default profile intentionally unchanged.
+[profile.activation]
+src = "activation-empty"
+test = "activation-test"
+script = "activation-empty"
+out = "activation-out"
+cache_path = "activation-cache"
